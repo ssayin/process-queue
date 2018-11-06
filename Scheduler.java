@@ -2,116 +2,158 @@ import java.io.*;
 
 public class Scheduler {
 
-    /*
-     * Each time slice spans a second.
-     */
-    private final int TIME_SLICE = 1000;
+	private final int TIME_SLICE = 400;
+	private int time = 1;
 
-    /*
-     *  Our entry point
-     */
-    public static void main(String[] args) throws Exception {
-        if (args.length != 1) return; /* error */
-        Scheduler s = new Scheduler(args[0]);
-        s.start();
-    }
+	/*
+	 *  Our entry point
+	 */
+	public static void main(String[] args) throws Exception {
+		if (args.length != 1) return; /* error */
+		Scheduler s = new Scheduler(args[0]);
+		s.start();
+	}
 
-    public Scheduler(String filename) throws Exception {
-        queue = new HeapPriorityQueue<>();
-        ProcessReader r = new ProcessReader(new File(filename));
-        Process p = r.next();
-        while (p != null) {
-            queue.insert(p.getPriority(), p);
-            p = r.next();
-        }
-    }
+	public Scheduler(String filename) throws Exception {
+		queue = new HeapPriorityQueue<>();
+		queueArrival = new HeapPriorityQueue<>();
+		listQueue = new LinkedQueue<>();
 
-    public void start() throws InterruptedException {
-        while (!queue.isEmpty())
-        {
-            Process p = queue.min().getValue();
-            if (p.getLength() == 0) {
-                queue.removeMin();
-                continue;
-            }
+		ProcessReader r = new ProcessReader(new File(filename));
 
-            p.run();
-
-            System.out.println("Time=" + time++);
-
-            Thread.sleep(TIME_SLICE);
-        }
-    }
-
-    private HeapPriorityQueue<Integer, Process> queue;
-    private int time = 1;
+		Process p = null;
+		while (r.hasNext()) {
+			p = r.next();
+			queueArrival.insert(p.getArrivalTime(), p);
+			listQueue.enqueue(p);
+		}
+	}
 
 
-    private class Process {
-        public Process(String id, int length,
-                       int priority, int arrivalTime) {
-            this.id = id;
-            this.length = length;
-            this.priority = priority;
-            this.arrivalTime = arrivalTime;
-        }
+	private void update() {
+		if (queueArrival.isEmpty()) return;
+		while (time == queueArrival.min().getKey()) {
+			Process x = queueArrival.min().getValue();
+			queue.insert(x.getPriority(), x);
+			queueArrival.removeMin();
+			if (queueArrival.isEmpty()) break;
+		}
 
-        void run() {
-            System.out.println("Now running " + id);
-            length--;
-        }
+	}
 
-        public String getId() {
-            return id;
-        }
+	public void start() throws InterruptedException {
+		System.out.println("\n<BEGIN SIMULATION>\n");
 
-        public int getLength() {
-            return length;
-        }
+		while (!(queue.isEmpty() && queueArrival.isEmpty())) {
 
-        public int getPriority() {
-            return priority;
-        }
+			update();
+			
+			if (!queue.isEmpty())
+			{
+				Process p = queue.min().getValue();
+				
+				if (p.getLength() == 0) {
+					queue.removeMin();
+					continue;
+				}
 
-        public int getArrivalTime() {
-            return arrivalTime;
-        }
+				p.run();
+			}
+						
+			System.out.println("<Time=" + time++ + ">");
 
-        private String id;
-        private int length;
-        private int priority;
-        private int arrivalTime;
-    }
-
-    private class ProcessReader {
-        public ProcessReader(File f) throws FileNotFoundException {
-            fr = new FileReader(f);
-            sc = new java.util.Scanner(fr);
-            sc.nextLine(); /* read header */
-        }
-
-        public Process next() throws Exception
-        {
-            if (hasNext())
-            {
-                String tmp = sc.nextLine();
-                String[] data = tmp.split("\\t");
-                if (data.length != 4) throw new Exception("Data length is " + data.length);
-                return new Process(data[0], Integer.parseInt((data[1])),
-                        Integer.parseInt((data[2])), Integer.parseInt((data[3])));
-            }
-
-            return null;
-        }
-
-        public boolean hasNext()
-        {
-            return sc.hasNextLine();
-        }
-
-        private FileReader fr;
-        private java.util.Scanner sc;
-    }
+			Thread.sleep(TIME_SLICE);
+		}
 
 
+		System.out.format("\n<END SIMULATION>\n\n%s\t  %s\t  %s\t  %s", 
+				"<ID>", "<LENGTH>", "<PRIORITY>", "<ARRIVAL>\n");
+
+		Process p = null;
+
+		while(!listQueue.isEmpty())
+		{
+			p = listQueue.dequeue();
+			System.out.format("%s\t\t%d\t\t%d\t\t%d\n", p.getId(),
+					p.getInitialLength(), 
+					p.getPriority(), 
+					p.getArrivalTime());
+		}
+
+	}
+
+	private HeapPriorityQueue<Integer, Process> queue;
+	private HeapPriorityQueue<Integer, Process> queueArrival;
+	private LinkedQueue<Process> listQueue;
+
+	private class Process {
+		public Process(String id, int length,
+				int priority, int arrivalTime) {
+			this.id = id;
+			this.length = length;
+			this.initialLength = length;
+			this.priority = priority;
+			this.arrivalTime = arrivalTime;
+		}
+
+		void run() {
+			System.out.print("Now running " + id + "  ");
+			length--;
+		}
+
+		public String getId() {
+			return id;
+		}
+
+		public int getLength() {
+			return length;
+		}
+
+		public int getPriority() {
+			return priority;
+		}
+
+		public int getArrivalTime() {
+			return arrivalTime;
+		}
+
+		public int getInitialLength() {
+			return initialLength;
+		}
+
+		private String id;
+		private int length;
+		private int priority;
+		private int arrivalTime;
+		private int initialLength;
+	}
+
+	private class ProcessReader {
+		public ProcessReader(File f) throws FileNotFoundException {
+			fr = new FileReader(f);
+			sc = new java.util.Scanner(fr);
+			sc.nextLine(); /* read header */
+		}
+
+		public Process next() throws Exception {
+			String tmp = sc.nextLine();
+			String[] data = tmp.split("\\t");
+
+			if (data.length != 4) 	
+				throw new Exception("Data length " + data.length);
+
+			return new Process(data[0], 
+					Integer.parseInt((data[1])),
+					Integer.parseInt((data[2])), 
+					Integer.parseInt((data[3])));
+
+		}
+
+		public boolean hasNext(){
+			return sc.hasNextLine();
+		}
+
+		private FileReader fr;
+		private java.util.Scanner sc;
+	}
 }
