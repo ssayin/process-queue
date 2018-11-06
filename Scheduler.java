@@ -1,112 +1,117 @@
 import java.io.*;
-public class Scheduler
-{
-	class Process
-	{
-		public Process(String id, int length,
-				int priority, int arrivalTime)
-		{
-			this.id = id;
-			this.length = length;
-			this.priority = priority;
-			this.arrivalTime = arrivalTime;
-		}
 
-		void run()
-		{
-			System.out.println("Now running " + id);
-		}
+public class Scheduler {
 
-		public String getId() { return id; }
-		public int getLength() { return length; }
-		public int getPriority() { return priority; }
-		public int getArrivalTime() { return arrivalTime; }
+    /*
+     * Each time slice spans a second.
+     */
+    private final int TIME_SLICE = 1000;
 
-		private String id;
-		private int length;
-		private int priority;
-		private int arrivalTime;	
-	}
+    /*
+     *  Our entry point
+     */
+    public static void main(String[] args) throws Exception {
+        if (args.length != 1) return; /* error */
+        Scheduler s = new Scheduler(args[0]);
+        s.start();
+    }
 
-	public class ProcessReader
-	{
-		public ProcessReader() { }
-		public ProcessReader(File f) throws FileNotFoundException
-		{
-			fr = new FileReader(f);
-		
-	       	}
+    public Scheduler(String filename) throws Exception {
+        queue = new HeapPriorityQueue<>();
+        ProcessReader r = new ProcessReader(new File(filename));
+        Process p = r.next();
+        while (p != null) {
+            queue.insert(p.getPriority(), p);
+            p = r.next();
+        }
+    }
 
-		public Process readNext() throws IOException
-		{
-			String a = new String();
-			int rd = fr.read();
-			while (rd != -1 && rd != '\n')
-			{
-				a += (char)rd;
-				rd = fr.read();
-			}
+    public void start() throws InterruptedException {
+        while (!queue.isEmpty())
+        {
+            Process p = queue.min().getValue();
+            if (p.getLength() == 0) {
+                queue.removeMin();
+                continue;
+            }
 
-			String[] data = a.split("\t");
-			
-			if (data.length != 4) return null;
-			Process p = new Process(data[0], 
-					Integer.parseInt(data[1]), 
-					Integer.parseInt(data[2]), 
-					Integer.parseInt(data[3]));
+            p.run();
 
-			last = p;
-			return p;
-		}
+            System.out.println("Time=" + time++);
 
-		private Process last = null;
+            Thread.sleep(TIME_SLICE);
+        }
+    }
+
+    private HeapPriorityQueue<Integer, Process> queue;
+    private int time = 1;
 
 
-		private void readHeader() throws IOException
-		{
-			expect("<ID>\t<LENGTH>\t<PRIORITY>\t<ARRIVAL TIME>\n");
-		}
+    private class Process {
+        public Process(String id, int length,
+                       int priority, int arrivalTime) {
+            this.id = id;
+            this.length = length;
+            this.priority = priority;
+            this.arrivalTime = arrivalTime;
+        }
+
+        void run() {
+            System.out.println("Now running " + id);
+            length--;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public int getLength() {
+            return length;
+        }
+
+        public int getPriority() {
+            return priority;
+        }
+
+        public int getArrivalTime() {
+            return arrivalTime;
+        }
+
+        private String id;
+        private int length;
+        private int priority;
+        private int arrivalTime;
+    }
+
+    private class ProcessReader {
+        public ProcessReader(File f) throws FileNotFoundException {
+            fr = new FileReader(f);
+            sc = new java.util.Scanner(fr);
+            sc.nextLine(); /* read header */
+        }
+
+        public Process next() throws Exception
+        {
+            if (hasNext())
+            {
+                String tmp = sc.nextLine();
+                String[] data = tmp.split("\\t");
+                if (data.length != 4) throw new Exception("Data length is " + data.length);
+                return new Process(data[0], Integer.parseInt((data[1])),
+                        Integer.parseInt((data[2])), Integer.parseInt((data[3])));
+            }
+
+            return null;
+        }
+
+        public boolean hasNext()
+        {
+            return sc.hasNextLine();
+        }
+
+        private FileReader fr;
+        private java.util.Scanner sc;
+    }
 
 
-		private boolean expect(String s) throws IOException 
-		{
-			int c = 0;
-			int rd = fr.read();
-			while (rd != -1 && c < s.length())
-			{	
-				if (s.charAt(c) != rd) return false;
-				rd = fr.read();
-				c++;
-			}
-
-			return true;
-		}
-	}
-
-	/* 
-	 * Each time slice spans a second.
-	 */
-	private final int TIME_SLICE = 1000;
-	private FileReader fr;
-	private HeapPriorityQueue<Integer, Process> queue;
-
-	public Scheduler() throws IOException, FileNotFoundException
-	{
-		queue = new HeapPriorityQueue<>();
-		ProcessReader r = new ProcessReader(new File("process.txt"));
-
-		r.readHeader();
-		Process p = r.readNext();
-		while (p != null)
-		{
-			queue.insert(p.getPriority(), p);
-			p = r.readNext();
-		}
-	}
-
-
-	public static void main(String[] args) throws IOException, FileNotFoundException
-	{
-		Scheduler s = new Scheduler();
-	}
 }
